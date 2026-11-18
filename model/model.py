@@ -1,3 +1,5 @@
+import copy
+
 from database.parco_DAO import ParcoDAO
 from database.escursione_DAO import EscursioneDAO
 from database.punto_interesse_DAO import PuntoInteresseDAO
@@ -12,6 +14,7 @@ class Model:
         self._costo = 0
 
         # TODO: Aggiungere eventuali altri attributi
+        self.escursioni_punto_interesse = []
 
         # Caricamento
         self.load_escursioni()
@@ -38,7 +41,7 @@ class Model:
             --> Ogni Escursione ha un set di PuntoInteresse.
             --> Ogni PuntoInteresse ha un set di Escursioni.
         """
-        # TODO
+        self.escursioni_punto_interesse=EscursioneDAO.get_escursioni_punti_interesse()
 
     def genera_pacchetto(self, id_parco: str, max_giorni: int = None, max_budget: float = None):
         """
@@ -55,7 +58,16 @@ class Model:
         self._costo = 0
         self._valore_ottimo = -1
 
-        # TODO
+        self.max_giorni = max_giorni
+        self.max_budget = max_budget
+        self.escursioni_disponibili = []
+        for escursione in self.load_escursioni.values():
+            if id_parco==escursione.id_parco:
+                self.escursioni_disponibili.append(escursione)
+
+        self._ricorsione(0,[],0,0,0,set())
+
+
 
         return self._pacchetto_ottimo, self._costo, self._valore_ottimo
 
@@ -63,3 +75,17 @@ class Model:
         """ Algoritmo di ricorsione che deve trovare il pacchetto che massimizza il voto complessivo dei visitatori"""
 
         # TODO: è possibile cambiare i parametri formali della funzione se ritenuto opportuno
+        if valore_corrente>self._valore_ottimo:
+            self._pacchetto_ottimo=copy.deepcopy(pacchetto_parziale)
+            self._costo=costo_corrente
+            self._valore_ottimo=valore_corrente
+
+        if start_index>len(self.escursioni_disponibili):
+            return
+        else:
+            for i in range(start_index, len(self.escursioni_disponibili)):
+                for escursione in self.escursioni_disponibili:
+                    if durata_corrente+escursione.durata_giorni<=self.max_giorni or self.max_giorni is None:
+                        durata_corrente+=escursione.durata_giorni
+
+
