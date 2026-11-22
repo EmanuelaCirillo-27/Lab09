@@ -3,6 +3,8 @@ import copy
 from database.parco_DAO import ParcoDAO
 from database.escursione_DAO import EscursioneDAO
 from database.punto_interesse_DAO import PuntoInteresseDAO
+from model.escursione import Escursione
+
 
 class Model:
     def __init__(self):
@@ -43,6 +45,19 @@ class Model:
         """
         self.escursioni_punto_interesse=EscursioneDAO.get_escursioni_punti_interesse()
 
+        for escursione in self.escursioni_map.values():
+            escursione.punti_interesse = set()
+
+        for punto in self.punti_interesse_map.values():
+            punto.escursioni = set()
+
+        for relazione in self.escursioni_punto_interesse:
+            escursione = self.escursioni_map.get(relazione["id_escursione"])
+            punto = self.punti_interesse_map.get(relazione["id_punto_interesse"])
+
+            escursione.punti_interesse.add(punto)
+            punto.escursioni.add(escursione)
+
     def genera_pacchetto(self, id_parco: str, max_giorni: int = None, max_budget: float = None):
         """
         Calcola il pacchetto di escursioni ottimale per un parco rispettando i vincoli di durata, budget e punti di interesse unici.
@@ -61,9 +76,12 @@ class Model:
         self.max_giorni = max_giorni
         self.max_budget = max_budget
         self.escursioni_disponibili = []
-        for escursione in self.load_escursioni.values():
+        for escursione in self.escursioni_map.values():
             if id_parco==escursione.id_parco:
                 self.escursioni_disponibili.append(escursione)
+
+
+
 
         self._ricorsione(0,[],0,0,0,set())
 
@@ -76,16 +94,64 @@ class Model:
 
         # TODO: è possibile cambiare i parametri formali della funzione se ritenuto opportuno
         if valore_corrente>self._valore_ottimo:
-            self._pacchetto_ottimo=copy.deepcopy(pacchetto_parziale)
+            self._pacchetto_ottimo=pacchetto_parziale.copy()
             self._costo=costo_corrente
             self._valore_ottimo=valore_corrente
 
-        if start_index>len(self.escursioni_disponibili):
-            return
-        else:
-            for i in range(start_index, len(self.escursioni_disponibili)):
-                for escursione in self.escursioni_disponibili:
-                    if durata_corrente+escursione.durata_giorni<=self.max_giorni or self.max_giorni is None:
-                        durata_corrente+=escursione.durata_giorni
 
+        for i in range(start_index, len(self.escursioni_disponibili)):
+            escursione=self.escursioni_disponibili[i]
+
+            if self._vincoli_soddisfatti(escursione,pacchetto_parziale,durata_corrente,costo_corrente, punti_usati):
+                pacchetto_parziale.append(escursione)
+                pt_interesse=self._get_punti_escursione(escursione)
+                for punto in pt_interesse:
+                    punti_usati.add(punto)
+                valore_escursione=self._calcola_valore(escursione)
+
+                self._ricorsione(i+1,pacchetto_parziale,durata_corrente+escursione.durata_giorni,costo_corrente+escursione.costo,valore_corrente+valore_escursione,punti_usati)
+                pacchetto_parziale.pop()
+                punti_usati.difference_update(pt_interesse)
+
+    def _get_punti_escursione(self, escursione):
+        punti_nuova_escursione = set()
+        for punto in escursione.punti_interesse:
+            punti_nuova_escursione.add(punto.id)
+        return punti_nuova_escursione
+
+
+    def _calcola_valore(self,escursione):
+        somma_val=0
+        for punto in escursione.punti_interesse:
+            somma_val += punto.voto_visitatori
+        return somma_val
+
+
+    def _vincoli_soddisfatti(self,escursione,pacchetto_parziale,durata_corrente,costo_corrente, punti_usati):
+
+        # Vincolo 1: Le escursioni incluse nel pacchetto devono essere tutte diverse tra loro.
+        for elemento in pacchetto_parziale:
+            if elemento.id==escursione.id:
+                return False
+
+        # Vincolo 2 Non devono esserci punti di interesse duplicati all'interno del pacchetto (non si visita due volte lo stesso punto di interesse).
+
+        punti_nuova_escursione=self._get_punti_escursione(escursione)
+        for punto_id in punti_nuova_escursione:
+            if punto_id in punti_usati:
+                return False
+
+        # Vincolo 3: La durata complessiva del pacchetto non deve superare il numero massimo di giorni indicato (G).
+        # Vincolo 4: Il costo totale del pacchetto non deve eccedere il budget massimo previsto (B).
+
+        durata=durata_corrente+escursione.durata_giorni
+        costo=costo_corrente+escursione.costo
+
+        if self.max_giorni is not None and durata>self.max_giorni:
+            return False
+
+        if self.max_budget is not None and costo>self.max_budget:
+            return False
+
+        return True
 
