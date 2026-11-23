@@ -43,14 +43,18 @@ class Model:
             --> Ogni Escursione ha un set di PuntoInteresse.
             --> Ogni PuntoInteresse ha un set di Escursioni.
         """
+        # Prendo dal DB la lista di dizionari con le relazioni (id_escursione, id_punto_interesse)
         self.escursioni_punto_interesse=EscursioneDAO.get_escursioni_punti_interesse()
 
+        # Creo un insieme vuoto per i punti di interesse su ogni oggetto Escursione
         for escursione in self.escursioni_map.values():
             escursione.punti_interesse = set()
 
+        # Creo un insieme vuoto per le escursioni su ogni oggetto PuntoInteresse
         for punto in self.punti_interesse_map.values():
             punto.escursioni = set()
 
+        # Collego gli oggetti Escursione e PuntoInteresse usando le mappe già caricate
         for relazione in self.escursioni_punto_interesse:
             escursione = self.escursioni_map.get(relazione["id_escursione"])
             punto = self.punti_interesse_map.get(relazione["id_punto_interesse"])
@@ -76,6 +80,8 @@ class Model:
         self.max_giorni = max_giorni
         self.max_budget = max_budget
         self.escursioni_disponibili = []
+
+        # Filtraggio delle sole escursioni che appartengono al parco selezionato
         for escursione in self.escursioni_map.values():
             if id_parco==escursione.id_parco:
                 self.escursioni_disponibili.append(escursione)
@@ -89,31 +95,39 @@ class Model:
 
         return self._pacchetto_ottimo, self._costo, self._valore_ottimo
 
+
     def _ricorsione(self, start_index: int, pacchetto_parziale: list, durata_corrente: int, costo_corrente: float, valore_corrente: int, punti_usati: set):
         """ Algoritmo di ricorsione che deve trovare il pacchetto che massimizza il voto complessivo dei visitatori"""
 
         # TODO: è possibile cambiare i parametri formali della funzione se ritenuto opportuno
+        # Aggiorno la soluzione migliore se la combinazione che sto considerando ora ha un voto totale maggiore
         if valore_corrente>self._valore_ottimo:
             self._pacchetto_ottimo=pacchetto_parziale.copy()
             self._costo=costo_corrente
             self._valore_ottimo=valore_corrente
 
-
+        #  Vedo le escursioni successive, provo ad aggiungerle nel pacchetto, e vedo se rispetta i vincoli
         for i in range(start_index, len(self.escursioni_disponibili)):
             escursione=self.escursioni_disponibili[i]
 
             if self._vincoli_soddisfatti(escursione,pacchetto_parziale,durata_corrente,costo_corrente, punti_usati):
+
+                # Se i vincoli sono rispettati, aggiungo escursione, i suoi punti di interesse e calcolo il suo valore
                 pacchetto_parziale.append(escursione)
                 pt_interesse=self._get_punti_escursione(escursione)
                 for punto in pt_interesse:
                     punti_usati.add(punto)
                 valore_escursione=self._calcola_valore(escursione)
 
+                # Ricorsione
                 self._ricorsione(i+1,pacchetto_parziale,durata_corrente+escursione.durata_giorni,costo_corrente+escursione.costo,valore_corrente+valore_escursione,punti_usati)
+
+                # Backtracking: rimuovo l'escursione e i suoi punti per provare altre strade
                 pacchetto_parziale.pop()
                 punti_usati.difference_update(pt_interesse)
 
     def _get_punti_escursione(self, escursione):
+        # Funzione che restituisce l'insieme degli ID dei punti di interesse collegati all'escursione
         punti_nuova_escursione = set()
         for punto in escursione.punti_interesse:
             punti_nuova_escursione.add(punto.id)
@@ -121,6 +135,7 @@ class Model:
 
 
     def _calcola_valore(self,escursione):
+        # Funzione che calcola la somma dei voti dei visitatori di tutti i punti di interesse inclusi nell'escursione
         somma_val=0
         for punto in escursione.punti_interesse:
             somma_val += punto.voto_visitatori
